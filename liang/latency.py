@@ -2,8 +2,10 @@ import functools
 import logging
 import time
 
-import environment
-import handlers
+from liang import (
+    environment,
+    handlers
+)
 
 METRIC_NAME = 'LATENCY'
 

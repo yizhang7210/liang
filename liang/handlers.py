@@ -1,7 +1,9 @@
 import abc
 
-import environment
-import utils
+from liang import (
+    environment,
+    utils
+)
 
 
 class FailureHandler(abc.ABC):

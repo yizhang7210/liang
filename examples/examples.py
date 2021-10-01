@@ -1,4 +1,4 @@
-import latency
+from liang import latency
 
 
 @latency.require(0)
