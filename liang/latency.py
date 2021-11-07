@@ -1,34 +1,76 @@
 import functools
 import logging
+import signal
 import time
 
 from liang import (
     environment,
-    handlers
+    handlers,
+    utils
 )
 
-METRIC_NAME = 'LATENCY'
+logger = logging.getLogger(__name__)
+
+METRIC_NAME = 'LATENCY_SECONDS'
 
 
-def require(threshold_in_seconds: int, handler: handlers.FailureHandler = None):
+def require(threshold_seconds: int, handler: handlers.FailureHandler = None):
+
+    if threshold_seconds <= 0:
+        raise ValueError(f"threshold_seconds needs to be an integer greater than 0")
+
     if not handler:
         handler = handlers.RaiseExceptionFailureHandler()
 
     def decorator_require(func):
+        def _handle_timeout(signum, frame):
+            context = environment.ExecutionContext(func, METRIC_NAME, threshold_seconds, None)
+            handler.handle(context)
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            start = time.perf_counter()
-            output = func(*args, **kwargs)
-            end = time.perf_counter()
-            elapsed_time_seconds = end - start
-            logging.info(f"Function {func.__name__!r} finished in {elapsed_time_seconds:.4f} seconds.")
+            signal.signal(signal.SIGALRM, _handle_timeout)
+            signal.alarm(threshold_seconds)
 
-            if elapsed_time_seconds > threshold_in_seconds:
-                context = environment.ExecutionContext(func, args, kwargs, METRIC_NAME, threshold_in_seconds, elapsed_time_seconds)
-                handler.handle(context)
+            try:
+                signature = utils.get_function_signature(args, kwargs)
+                logger.info(f"Function {func.__name__!r}({signature}) starting execution.")
+                start = time.perf_counter()
+                output = func(*args, **kwargs)
+                end = time.perf_counter()
+                elapsed_time_seconds = end - start
+                logger.info(f"Function {func.__name__!r}({signature}) finished in {elapsed_time_seconds:.4f} seconds.")
+            finally:
+                signal.alarm(0)
 
             return output
 
         return wrapper
 
     return decorator_require
+
+
+def recommend(threshold_seconds: int, handler: handlers.FailureHandler = None):
+    if not handler:
+        handler = handlers.LogWarningFailureHandler()
+
+    def decorator_measure(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            signature = utils.get_function_signature(args, kwargs)
+            logger.info(f"Function {func.__name__!r}({signature}) starting execution.")
+            start = time.perf_counter()
+            output = func(*args, **kwargs)
+            end = time.perf_counter()
+            elapsed_time_seconds = end - start
+            logger.info(f"Function {func.__name__!r}({signature}) finished in {elapsed_time_seconds:.4f} seconds.")
+
+            if elapsed_time_seconds > threshold_seconds:
+                context = environment.ExecutionContext(func, METRIC_NAME, threshold_seconds, elapsed_time_seconds)
+                handler.handle(context)
+
+            return output
+
+        return wrapper
+
+    return decorator_measure

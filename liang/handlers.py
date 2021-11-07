@@ -1,9 +1,11 @@
 import abc
+import logging
 
 from liang import (
-    environment,
-    utils
+    environment
 )
+
+logger = logging.getLogger(__name__)
 
 
 class FailureHandler(abc.ABC):
@@ -16,9 +18,17 @@ class FailureHandler(abc.ABC):
 class RaiseExceptionFailureHandler(FailureHandler):
 
     def handle(self, context: environment.ExecutionContext):
-        func = context.function
-        signature = utils.get_function_signature(context.args, context.kwargs)
+        message = f"Function {context.function.__name__!r} expected to have {context.metric_name} to be {context.metric_expected}"
+        if context.metric_actual:
+            message += f" but is actually {context.metric_actual}"
+        raise TimeoutError(message)
 
-        raise RuntimeError(
-            f"Function {func.__name__!r}({signature}) expected to have {context.metric_name} to be "
-            f"{context.metric_expected} but is actually {context.metric_actual}.")
+
+class LogWarningFailureHandler(FailureHandler):
+
+    def handle(self, context: environment.ExecutionContext):
+        message = f"Function {context.function.__name__!r} expected to have {context.metric_name} to be {context.metric_expected}"
+        if context.metric_actual:
+            message += f" but is actually {context.metric_actual}"
+        logger.warning(message)
+
