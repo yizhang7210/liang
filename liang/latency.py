@@ -6,6 +6,7 @@ import time
 from liang import (
     environment,
     handlers,
+    measurement,
     utils
 )
 
@@ -50,23 +51,34 @@ def require(threshold_seconds: int, handler: handlers.FailureHandler = None):
     return decorator_require
 
 
-def recommend(threshold_seconds: int, handler: handlers.FailureHandler = None):
+def recommend(threshold_seconds: int, handler: handlers.FailureHandler = None, measurer: measurement.Measurer = None):
+
+    if threshold_seconds <= 0:
+        raise ValueError(f"threshold_seconds needs to be an integer greater than 0")
+
     if not handler:
         handler = handlers.LogWarningFailureHandler()
+
+    if not measurer:
+        measurer = measurement.SinglePointMeasurer(0)
 
     def decorator_measure(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            function_name = func.__name__
             signature = utils.get_function_signature(args, kwargs)
-            logger.info(f"Function {func.__name__!r}({signature}) starting execution.")
+            logger.info(f"Function {function_name!r}({signature}) starting execution.")
             start = time.perf_counter()
             output = func(*args, **kwargs)
             end = time.perf_counter()
             elapsed_time_seconds = end - start
-            logger.info(f"Function {func.__name__!r}({signature}) finished in {elapsed_time_seconds:.4f} seconds.")
+            logger.info(f"Function {function_name!r}({signature}) finished in {elapsed_time_seconds:.4f} seconds.")
 
-            if elapsed_time_seconds > threshold_seconds:
-                context = environment.ExecutionContext(func, METRIC_NAME, threshold_seconds, elapsed_time_seconds)
+            measurer.add_data_point(measurement.DataPoint(function_name, elapsed_time_seconds))
+            metric = measurer.get_metric(function_name)
+
+            if metric > threshold_seconds:
+                context = environment.ExecutionContext(func, METRIC_NAME, threshold_seconds, metric)
                 handler.handle(context)
 
             return output

@@ -2,7 +2,8 @@ import abc
 import logging
 
 from liang import (
-    environment
+    environment,
+    errors
 )
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ class RaiseExceptionFailureHandler(FailureHandler):
         message = f"Function {context.function.__name__!r} expected to have {context.metric_name} to be {context.metric_expected}"
         if context.metric_actual:
             message += f" but is actually {context.metric_actual}"
-        raise TimeoutError(message)
+        raise errors.MetricNotSatisfiedError(message)
 
 
 class LogWarningFailureHandler(FailureHandler):
